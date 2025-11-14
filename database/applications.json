@@ -1,0 +1,20 @@
+{
+    "Games": [
+        "relic-se/Fruit_Jam_Fruitris",
+        "relic-se/Fruit_Jam_Pong",
+        "relic-se/Fruit_Jam_Ssspeed_Dating"
+    ],
+    "Music": [
+        "samblenny/fruit-jam-portable-midi-synth"
+    ],
+    "Utilities": [
+        "samblenny/fruit-jam-color-checker",
+        "samblenny/fruit-jam-gamepad-tester",
+        "samblenny/fruit-jam-two-gamepad-demo",
+        "samblenny/fruit-jam-usb-midi-tester"
+    ],
+    "Other": [
+        "samblenny/fruit-jam-spirals",
+        "samblenny/fruit-jam-usb-midi-tester"
+    ]
+}
