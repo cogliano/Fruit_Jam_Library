@@ -408,26 +408,20 @@ def show_page(page: int = 0) -> None:
         else:
             item_title.text = metadata["title"]
             if "icon" in metadata:
-                icon = metadata["icon"]
-        finally:
-            item_title.text = title
-        
-        if icon is not None:
-            # download icon
-            status_label.text = "Downloading icon from {:s}".format(full_name)
-            display.refresh()
-            try:
-                icon_path = download_image(
-                    ICON_URL.format(full_name, repository["default_branch"], icon),
-                    repository["name"] + "_" + icon,
-                )
-            except (OSError, ValueError, HttpError) as e:
-                status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
+                status_label.text = "Downloading icon from {:s}".format(full_name)
                 display.refresh()
-            else:
-                icon_bmp, icon_palette = adafruit_imageload.load(icon_path)
-                item_icon.bitmap = icon_bmp
-                item_icon.pixel_shader = icon_palette
+                try:
+                    icon_path = download_image(
+                        ICON_URL.format(full_name, repository["default_branch"], metadata["icon"]),
+                        repository["name"] + "_" + metadata["icon"],
+                    )
+                except (OSError, ValueError, HttpError) as e:
+                    status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
+                    display.refresh()
+                else:
+                    icon_bmp, icon_palette = adafruit_imageload.load(icon_path)
+                    item_icon.bitmap = icon_bmp
+                    item_icon.pixel_shader = icon_palette
 
         # cleanup before loading next item
         gc.collect()
@@ -472,7 +466,7 @@ async def mouse_task() -> None:
                         else:
                             for button in category_group:
                                 if button.contains((mouse.x, mouse.y)):
-                                    select_category(category)
+                                    select_category(button.label)
                                     break
                     previous_mouse_state = mouse_state
                 else:
