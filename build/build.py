@@ -15,12 +15,10 @@ import zipfile
 import requests
 from circup.commands import main as circup_cli
 
-# TODO: Append additional asset directories here
 ASSET_DIRS = (
     "bitmaps",
 )
 
-# TODO: Append additional source files here
 SRC_FILES = (
     "boot.py",
     "code.py",
