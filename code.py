@@ -60,6 +60,12 @@ fj = adafruit_fruitjam.FruitJam()
 # load images
 default_icon_bmp, default_icon_palette = adafruit_imageload.load("bitmaps/default_icon.bmp")
 default_icon_palette.make_transparent(0)
+
+installed_bmp, installed_palette = adafruit_imageload.load("bitmaps/installed.bmp")
+installed_palette.make_transparent(1)
+installed_palette[0] = config.palette_bg if config is not None else 0x222222
+installed_palette[2] = config.palette_fg if config is not None else 0xffffff
+
 left_bmp, left_palette = adafruit_imageload.load("bitmaps/arrow_left.bmp")
 left_palette.make_transparent(0)
 right_bmp, right_palette = adafruit_imageload.load("bitmaps/arrow_right.bmp")
@@ -234,6 +240,13 @@ for index in range(PAGE_SIZE):
     )
     item_group.append(item_icon)
 
+    item_installed = displayio.TileGrid(
+        bitmap=installed_bmp,
+        pixel_shader=installed_palette,
+        x=item_icon.x + 2, y=item_icon.y + 2,
+    )
+    item_group.append(item_installed)
+
     item_title = Label(
         font=FONT,
         text="[title]",
@@ -356,7 +369,7 @@ def show_page(page: int = 0) -> None:
     
     for index in range(start, end):
         item_group = item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS))
-        item_icon, item_title, item_author, item_description = item_group
+        item_icon, item_installed, item_title, item_author, item_description = item_group
 
         full_name = applications[selected_category][index]
         repo_owner, repo_name = full_name.split("/")
@@ -374,6 +387,14 @@ def show_page(page: int = 0) -> None:
         item_author.text = repo_owner
         item_description.text = "Loading..."
         item_group.hidden = False
+
+        # check if application is installed
+        try:
+            os.stat("/sd/apps/{:s}".format(repo_name))
+        except:
+            item_installed.hidden = True
+        else:
+            item_installed.hidden = False
 
         status_label.text = "Reading repository data from {:s}".format(full_name)
         display.refresh()
