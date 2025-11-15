@@ -428,6 +428,10 @@ def show_page(page: int = 0) -> None:
             display.refresh()
         else:
             item_title.text = metadata["title"]
+
+            if "description" in metadata:
+                item_description.text = metadata["description"]
+
             if "icon" in metadata:
                 status_label.text = "Downloading icon from {:s}".format(full_name)
                 display.refresh()
