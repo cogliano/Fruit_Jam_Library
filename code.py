@@ -99,6 +99,12 @@ GRID_HEIGHT = display.height - TITLE_HEIGHT * SCALE - MENU_HEIGHT * SCALE - GRID
 ITEM_WIDTH = GRID_WIDTH // PAGE_COLUMNS
 ITEM_HEIGHT = GRID_HEIGHT // PAGE_ROWS
 
+DIALOG_MARGIN = 16
+DIALOG_BORDER = 2
+DIALOG_WIDTH = DISPLAY_WIDTH - DIALOG_MARGIN * 2 - (ARROW_MARGIN + left_bmp.width) * 2
+DIALOG_HEIGHT = DISPLAY_HEIGHT - TITLE_HEIGHT - DIALOG_MARGIN * 2 - STATUS_HEIGHT // SCALE
+DIALOG_BUTTON_WIDTH = DIALOG_WIDTH // 4
+
 BUTTON_PROPS = {
     "height": MENU_HEIGHT,
     "label_font": FONT,
@@ -290,22 +296,58 @@ right_tg.anchor_point = (1.0, 0.5)
 right_tg.anchored_position = (DISPLAY_WIDTH, (DISPLAY_HEIGHT // 2) - 2)
 scaled_group.append(right_tg)
 
-def select_category(name: str) -> None:
-    global categories, item_grid, selected_category
-    if name not in categories or name == selected_category:
-        return
-    selected_category = name
+# setup dialog
+dialog_group = displayio.Group()
+dialog_group.hidden = True
+scaled_group.append(dialog_group)
 
-    # update button states
-    for category_button in category_group:
-        category_button.selected = category_button.label == name
-    
-    # hide all items
-    for index in range(PAGE_SIZE):
-        item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS)).hidden = True
+dialog_border = displayio.TileGrid(
+    bitmap=displayio.Bitmap(DIALOG_WIDTH, DIALOG_HEIGHT, 1),
+    pixel_shader=fg_palette,
+    x=(DISPLAY_WIDTH - DIALOG_WIDTH) // 2,
+    y=TITLE_HEIGHT + DIALOG_MARGIN,
+)
+dialog_group.append(dialog_border)
 
-    # load first page of items
-    show_page()
+dialog_bg = displayio.TileGrid(
+    bitmap=displayio.Bitmap(DIALOG_WIDTH - DIALOG_BORDER * 2, DIALOG_HEIGHT - DIALOG_BORDER * 2, 1),
+    pixel_shader=bg_palette,
+    x=dialog_border.x + DIALOG_BORDER,
+    y=dialog_border.y + DIALOG_BORDER,
+)
+dialog_group.append(dialog_bg)
+
+dialog_content = TextBox(
+    font=FONT,
+    text="[content]",
+    width=DIALOG_WIDTH - DIALOG_BORDER * 2 - DIALOG_MARGIN * 2,
+    height=DIALOG_HEIGHT - DIALOG_BORDER * 2 - DIALOG_MARGIN * 3 - MENU_HEIGHT,
+    align=TextBox.ALIGN_CENTER,
+    color=(config.palette_fg if config is not None else 0xffffff),
+    x=dialog_bg.x + DIALOG_MARGIN,
+    y=dialog_bg.y + DIALOG_MARGIN,
+)
+dialog_group.append(dialog_content)
+
+dialog_no = Button(
+    x=dialog_border.x + (DIALOG_WIDTH - DIALOG_MARGIN) // 2 - DIALOG_BUTTON_WIDTH,
+    y=dialog_border.y + DIALOG_HEIGHT - DIALOG_BORDER - DIALOG_MARGIN - MENU_HEIGHT,
+    width=DIALOG_BUTTON_WIDTH,
+    label="No",
+    **BUTTON_PROPS,
+)
+dialog_group.append(dialog_no)
+
+dialog_yes = Button(
+    x=dialog_border.x + (DIALOG_WIDTH + DIALOG_MARGIN) // 2,
+    y=dialog_no.y,
+    width=DIALOG_BUTTON_WIDTH,
+    label="Yes",
+    **BUTTON_PROPS,
+)
+dialog_group.append(dialog_yes)
+
+# file download + caching
 
 def _download_file(url: str, extension: str, name: str|None = None) -> str:
     if not extension.startswith("."):
@@ -341,6 +383,25 @@ def download_json(url: str, name: str|None = None) -> str:
     with open(path, "r") as f:
         data = json.loads(f.read())
     return data
+
+# item navigation
+
+def select_category(name: str) -> None:
+    global categories, item_grid, selected_category
+    if name not in categories or name == selected_category:
+        return
+    selected_category = name
+
+    # update button states
+    for category_button in category_group:
+        category_button.selected = category_button.label == name
+    
+    # hide all items
+    for index in range(PAGE_SIZE):
+        item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS)).hidden = True
+
+    # load first page of items
+    show_page()
 
 current_page = 0
 def show_page(page: int = 0) -> None:
