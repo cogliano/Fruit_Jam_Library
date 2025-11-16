@@ -105,11 +105,11 @@ GRID_HEIGHT = display.height - TITLE_HEIGHT * SCALE - MENU_HEIGHT * SCALE - GRID
 ITEM_WIDTH = GRID_WIDTH // PAGE_COLUMNS
 ITEM_HEIGHT = GRID_HEIGHT // PAGE_ROWS
 
-DIALOG_MARGIN = 16
-DIALOG_BORDER = 2
-DIALOG_WIDTH = DISPLAY_WIDTH - DIALOG_MARGIN * 2 - (ARROW_MARGIN + left_bmp.width) * 2
-DIALOG_HEIGHT = DISPLAY_HEIGHT - TITLE_HEIGHT - DIALOG_MARGIN * 2 - STATUS_HEIGHT // SCALE
-DIALOG_BUTTON_WIDTH = DIALOG_WIDTH // 4
+DIALOG_MARGIN = 16 * SCALE
+DIALOG_BORDER = SCALE
+DIALOG_WIDTH = display.width - DIALOG_MARGIN * 2 - (ARROW_MARGIN + left_bmp.width) * SCALE * 2
+DIALOG_HEIGHT = display.height - TITLE_HEIGHT * SCALE - DIALOG_MARGIN * 2 - STATUS_HEIGHT
+DIALOG_BUTTON_WIDTH = DIALOG_WIDTH // SCALE // 4
 
 BUTTON_PROPS = {
     "height": MENU_HEIGHT,
@@ -132,10 +132,10 @@ bg_tg = displayio.TileGrid(
 )
 root_group.append(bg_tg)
 
-scaled_group = displayio.Group(scale=SCALE)
-root_group.append(scaled_group)
-
 # add title
+title_group = displayio.Group(scale=SCALE)
+root_group.append(title_group)
+
 title_label = Label(
     font=FONT,
     text="Fruit Jam Store",
@@ -143,7 +143,7 @@ title_label = Label(
     anchor_point=(0.5, 0.5),
     anchored_position=(DISPLAY_WIDTH // 2, TITLE_HEIGHT // 2),
 )
-scaled_group.append(title_label)
+title_group.append(title_label)
 
 # add status bar
 status_group = displayio.Group()
@@ -216,8 +216,8 @@ categories = list(applications.keys())
 selected_category = None
 
 # setup menu
-category_group = displayio.Group()
-scaled_group.append(category_group)
+category_group = displayio.Group(scale=SCALE)
+root_group.append(category_group)
 MENU_WIDTH = (DISPLAY_WIDTH - MENU_GAP * (len(categories) + 1)) // len(categories)
 for index, category in enumerate(categories):
     category_button = Button(
@@ -299,26 +299,35 @@ for index in range(PAGE_SIZE):
 # setup arrows
 original_arrow_btn_color = left_palette[2]
 
-left_tg = AnchoredTileGrid(bitmap=left_bmp, pixel_shader=left_palette)
-left_tg.anchor_point = (0, 0.5)
-left_tg.anchored_position = (0, (DISPLAY_HEIGHT // 2) - 2)
-scaled_group.append(left_tg)
+arrow_group = displayio.Group(scale=SCALE)
+root_group.append(arrow_group)
 
-right_tg = AnchoredTileGrid(bitmap=right_bmp, pixel_shader=right_palette)
-right_tg.anchor_point = (1.0, 0.5)
-right_tg.anchored_position = (DISPLAY_WIDTH, (DISPLAY_HEIGHT // 2) - 2)
-scaled_group.append(right_tg)
+left_arrow = AnchoredTileGrid(
+    bitmap=left_bmp,
+    pixel_shader=left_palette,
+)
+left_arrow.anchor_point = (0, 0.5)
+left_arrow.anchored_position = (0, (DISPLAY_HEIGHT // 2) - 2)
+arrow_group.append(left_arrow)
+
+right_arrow = AnchoredTileGrid(
+    bitmap=right_bmp,
+    pixel_shader=right_palette,
+)
+right_arrow.anchor_point = (1.0, 0.5)
+right_arrow.anchored_position = (DISPLAY_WIDTH, (DISPLAY_HEIGHT // 2) - 2)
+arrow_group.append(right_arrow)
 
 # setup dialog
 dialog_group = displayio.Group()
 dialog_group.hidden = True
-scaled_group.append(dialog_group)
+root_group.append(dialog_group)
 
 dialog_border = displayio.TileGrid(
     bitmap=displayio.Bitmap(DIALOG_WIDTH, DIALOG_HEIGHT, 1),
     pixel_shader=fg_palette,
-    x=(DISPLAY_WIDTH - DIALOG_WIDTH) // 2,
-    y=TITLE_HEIGHT + DIALOG_MARGIN,
+    x=(display.width - DIALOG_WIDTH) // 2,
+    y=TITLE_HEIGHT * SCALE + DIALOG_MARGIN,
 )
 dialog_group.append(dialog_border)
 
@@ -342,23 +351,27 @@ dialog_content = TextBox(
 )
 dialog_group.append(dialog_content)
 
+dialog_buttons = displayio.Group(scale=SCALE)
+dialog_buttons.hidden = True
+root_group.append(dialog_buttons)
+
 dialog_no = Button(
-    x=dialog_border.x + (DIALOG_WIDTH - DIALOG_MARGIN) // 2 - DIALOG_BUTTON_WIDTH,
-    y=dialog_border.y + DIALOG_HEIGHT - DIALOG_BORDER - DIALOG_MARGIN - MENU_HEIGHT,
+    x=(DISPLAY_WIDTH - MENU_GAP) // 2 - DIALOG_BUTTON_WIDTH,
+    y=DISPLAY_HEIGHT - (STATUS_HEIGHT + DIALOG_MARGIN * 2 + DIALOG_BORDER) // SCALE - MENU_HEIGHT,
     width=DIALOG_BUTTON_WIDTH,
     label="No",
     **BUTTON_PROPS,
 )
-dialog_group.append(dialog_no)
+dialog_buttons.append(dialog_no)
 
 dialog_yes = Button(
-    x=dialog_border.x + (DIALOG_WIDTH + DIALOG_MARGIN) // 2,
+    x=(DISPLAY_WIDTH + MENU_GAP) // 2,
     y=dialog_no.y,
     width=DIALOG_BUTTON_WIDTH,
     label="Yes",
     **BUTTON_PROPS,
 )
-dialog_group.append(dialog_yes)
+dialog_buttons.append(dialog_yes)
 
 # file download + caching
 
@@ -397,10 +410,19 @@ def download_json(url: str, name: str|None = None) -> str:
         data = json.loads(f.read())
     return data
 
+def is_installed(name: str) -> bool:
+    # check if application is installed
+    try:
+        os.stat("/sd/apps/{:s}".format(name))
+    except:
+        return False
+    else:
+        return True
+
 # item navigation
 
 def select_category(name: str) -> None:
-    global categories, item_grid, selected_category
+    global selected_category
     if name not in categories or name == selected_category:
         return
     selected_category = name
@@ -418,7 +440,7 @@ def select_category(name: str) -> None:
 
 current_page = 0
 def show_page(page: int = 0) -> None:
-    global selected_category, item_grid, page_label, applications, current_page
+    global selected_category, current_page
 
     # determine indices
     start = page * PAGE_SIZE
@@ -450,18 +472,11 @@ def show_page(page: int = 0) -> None:
         # set default details
         item_icon.bitmap = default_icon_bmp
         item_icon.pixel_shader = default_icon_palette
+        item_installed.hidden = not is_installed(repo_name)
         item_title.text = title
         item_author.text = repo_owner
         item_description.text = "Loading..."
         item_group.hidden = False
-
-        # check if application is installed
-        try:
-            os.stat("/sd/apps/{:s}".format(repo_name))
-        except:
-            item_installed.hidden = True
-        else:
-            item_installed.hidden = False
 
         status_label.text = "Reading repository data from {:s}".format(full_name)
         display.refresh()
@@ -529,6 +544,10 @@ def previous_page() -> None:
     global current_page
     show_page(current_page - 1)
 
+def refresh_page() -> None:
+    global current_page
+    show_page(current_page)
+
 # select first category and show page items
 select_category(categories[0])
 
@@ -536,7 +555,7 @@ select_category(categories[0])
 
 selected_application = None
 def select_application(index: int) -> None:
-    global categories, selected_category, current_page, selected_application, dialog_content, dialog_group
+    global selected_category, current_page, selected_application
 
     index += current_page * PAGE_SIZE
     if index < 0 or index >= len(applications[selected_category]):
@@ -548,51 +567,68 @@ def select_application(index: int) -> None:
     # hide other UI elements
     category_group.hidden = True
     item_grid.hidden = True
-    left_tg.hidden = True
-    right_tg.hidden = True
+    arrow_group.hidden = True
     
     # populate dialog info
     page_index = index % PAGE_SIZE
     item_group = item_grid.get_content((page_index % PAGE_COLUMNS, page_index // PAGE_COLUMNS))
-    item_icon, item_title, item_author, item_description = item_group
+    item_icon, item_installed, item_title, item_author, item_description = item_group
 
-    dialog_content.text = "Would you like to download and install \"{:s}\" by {:s} to your SD card at /sd/apps/{:s}?".format(
-        item_title.text,
-        item_author.text,
-        repo_name
-    )
+    if item_installed.hidden:
+        dialog_content.text = "Would you like to download and install \"{:s}\" by {:s} to your SD card at /sd/apps/{:s}?".format(
+            item_title.text,
+            item_author.text,
+            repo_name
+        )
+    else:
+        dialog_content.text = "The application, \"{:s}\", is already installed. Would you like to remove it from your SD card at /sd/apps/{:s}? Any save data within /saves will be retained.".format(
+            item_title.text,
+            repo_name
+        )
 
     dialog_group.hidden = False
+    dialog_buttons.hidden = False
 
 def deselect_application() -> None:
-    # invalidate selection
     global selected_application
+
+    # invalidate selection
     selected_application = None
 
     # hide dialog
     dialog_group.hidden = True
+    dialog_buttons.hidden = True
 
     # show other UI elements
     category_group.hidden = False
     item_grid.hidden = False
-    left_tg.hidden = False
-    right_tg.hidden = False
+    arrow_group.hidden = False
 
-def download_application() -> None:
-    global selected_application
+def toggle_application() -> None:
+    global selected_application, current_page
     if selected_application is None:
         return
+    repo_owner, repo_name = selected_application.split("/")
     
-    print("Downloading?")
+    if is_installed(repo_name):
+        print("Removing")
+    else:
+        print("Downloading")
+
+    # hide dialog and update installed state
+    deselect_application()
+    refresh_page()
 
 # mouse control
+mouse_group = displayio.Group(scale=SCALE)
+root_group.append(mouse_group)
 async def mouse_task() -> None:
-    global selected_category, categories, category_group, root_group, right_tg, left_tg, selected_application
+    global selected_category, selected_application
     while True:
         if (mouse := adafruit_usb_host_mouse.find_and_init_boot_mouse()) is not None:
             mouse.x = DISPLAY_WIDTH // 2
             mouse.y = DISPLAY_HEIGHT // 2
-            scaled_group.append(mouse.tilegrid)
+            mouse_group.append(mouse.tilegrid)
 
             timeouts = 0
             previous_mouse_state = False
@@ -601,12 +637,12 @@ async def mouse_task() -> None:
                     timeouts = 0
                     mouse_state = "left" in mouse.pressed_btns
                     if mouse_state and not previous_mouse_state:
-                        if dialog_group.hidden:
+                        if dialog_buttons.hidden:
                             if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
                                 select_application(clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0])
-                            elif right_tg.contains((mouse.x, mouse.y, 0)):
+                            elif right_arrow.contains((mouse.x, mouse.y, 0)):
                                 next_page()
-                            elif left_tg.contains((mouse.x, mouse.y, 0)):
+                            elif left_arrow.contains((mouse.x, mouse.y, 0)):
                                 previous_page()
                             else:
                                 for button in category_group:
@@ -614,7 +650,7 @@ async def mouse_task() -> None:
                                         select_category(button.label)
                                         break
                         elif dialog_yes.contains((mouse.x, mouse.y, 0)):
-                            download_application()
+                            toggle_application()
                         elif dialog_no.contains((mouse.x, mouse.y, 0)):
                             deselect_application()
                     previous_mouse_state = mouse_state
@@ -622,7 +658,7 @@ async def mouse_task() -> None:
                     timeouts += 1
                 await asyncio.sleep(1/30)
 
-            scaled_group.remove(mouse.tilegrid)
+            mouse_group.remove(mouse.tilegrid)
         await asyncio.sleep(1)
 
 async def keyboard_task() -> None:
