@@ -507,9 +507,62 @@ def previous_page() -> None:
 # select first category and show page items
 select_category(categories[0])
 
+# application download
+
+selected_application = None
+def select_application(index: int) -> None:
+    global categories, selected_category, current_page, selected_application, dialog_content, dialog_group
+
+    index += current_page * PAGE_SIZE
+    if index < 0 or index >= len(applications[selected_category]):
+        return
+    
+    selected_application = applications[selected_category][index]
+    repo_owner, repo_name = selected_application.split("/")
+    
+    # hide other UI elements
+    category_group.hidden = True
+    item_grid.hidden = True
+    left_tg.hidden = True
+    right_tg.hidden = True
+    
+    # populate dialog info
+    page_index = index % PAGE_SIZE
+    item_group = item_grid.get_content((page_index % PAGE_COLUMNS, page_index // PAGE_COLUMNS))
+    item_icon, item_title, item_author, item_description = item_group
+
+    dialog_content.text = "Would you like to download and install \"{:s}\" by {:s} to your SD card at /sd/apps/{:s}?".format(
+        item_title.text,
+        item_author.text,
+        repo_name
+    )
+
+    dialog_group.hidden = False
+
+def deselect_application() -> None:
+    # invalidate selection
+    global selected_application
+    selected_application = None
+
+    # hide dialog
+    dialog_group.hidden = True
+
+    # show other UI elements
+    category_group.hidden = False
+    item_grid.hidden = False
+    left_tg.hidden = False
+    right_tg.hidden = False
+
+def download_application() -> None:
+    global selected_application
+    if selected_application is None:
+        return
+    
+    print("Downloading?")
+
 # mouse control
 async def mouse_task() -> None:
-    global selected_category, categories, category_group, root_group, right_tg, left_tg
+    global selected_category, categories, category_group, root_group, right_tg, left_tg, selected_application
     while True:
         if (mouse := adafruit_usb_host_mouse.find_and_init_boot_mouse()) is not None:
             mouse.x = DISPLAY_WIDTH // 2
@@ -523,18 +576,22 @@ async def mouse_task() -> None:
                     timeouts = 0
                     mouse_state = "left" in mouse.pressed_btns
                     if mouse_state and not previous_mouse_state:
-                        if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
-                            index = current_page * PAGE_SIZE + clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0]
-                            print("clicked: {:d}".format(index))
-                        elif right_tg.contains((mouse.x, mouse.y, 0)):
-                            next_page()
-                        elif left_tg.contains((mouse.x, mouse.y, 0)):
-                            previous_page()
-                        else:
-                            for button in category_group:
-                                if button.contains((mouse.x, mouse.y)):
-                                    select_category(button.label)
-                                    break
+                        if dialog_group.hidden:
+                            if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
+                                select_application(clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0])
+                            elif right_tg.contains((mouse.x, mouse.y, 0)):
+                                next_page()
+                            elif left_tg.contains((mouse.x, mouse.y, 0)):
+                                previous_page()
+                            else:
+                                for button in category_group:
+                                    if button.contains((mouse.x, mouse.y)):
+                                        select_category(button.label)
+                                        break
+                        elif dialog_yes.contains((mouse.x, mouse.y, 0)):
+                            download_application()
+                        elif dialog_no.contains((mouse.x, mouse.y, 0)):
+                            deselect_application()
                     previous_mouse_state = mouse_state
                 else:
                     timeouts += 1
