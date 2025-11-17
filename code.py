@@ -35,6 +35,11 @@ import asyncio
 
 from zipfile import ZipFile
 
+try:
+    import typing
+except ImportError:
+    pass
+
 # program constants
 APPLICATIONS_URL = "https://raw.githubusercontent.com/relic-se/Fruit_Jam_Store/refs/heads/main/database/applications.json"
 METADATA_URL = "https://raw.githubusercontent.com/{:s}/refs/heads/main/metadata.json"
@@ -432,23 +437,61 @@ dialog_buttons = displayio.Group(scale=SCALE)
 dialog_buttons.hidden = True
 root_group.append(dialog_buttons)
 
-dialog_no = Button(
-    x=(DISPLAY_WIDTH - MENU_GAP) // 2 - DIALOG_BUTTON_WIDTH,
-    y=DISPLAY_HEIGHT - (STATUS_HEIGHT + DIALOG_MARGIN * 2 + DIALOG_BORDER) // SCALE - MENU_HEIGHT,
-    width=DIALOG_BUTTON_WIDTH,
-    label="No",
-    **BUTTON_PROPS,
-)
-dialog_buttons.append(dialog_no)
+class DialogButton(Button):
+    def __init__(self, action: typing.Callable = None, **kwargs):
+        self._action = action
+        super().__init__(**kwargs)
+    def click(self) -> None:
+        if self._action is not None:
+            self.selected = True
+            self._action()
 
-dialog_yes = Button(
-    x=(DISPLAY_WIDTH + MENU_GAP) // 2,
-    y=dialog_no.y,
-    width=DIALOG_BUTTON_WIDTH,
-    label="Yes",
-    **BUTTON_PROPS,
-)
-dialog_buttons.append(dialog_yes)
+def show_dialog(content: str, actions: list = None) -> None:
+    # update content
+    dialog_content.text = content
+
+    # create buttons
+    if actions is not None:
+        button_width = min(
+            DIALOG_BUTTON_WIDTH,
+            (DIALOG_WIDTH - (DIALOG_BORDER // SCALE + DIALOG_MARGIN // SCALE) * 2 - MENU_GAP * (len(actions) - 1)) // len(actions)
+        )
+        buttons_width = (button_width + MENU_GAP) * len(actions) - MENU_GAP
+        for index, (label, action) in enumerate(actions):
+            dialog_buttons.append(DialogButton(
+                action=action,
+                label=label,
+                x=(DISPLAY_WIDTH - buttons_width) // 2 + (button_width + MENU_GAP) * index,
+                y=DISPLAY_HEIGHT - (STATUS_HEIGHT + DIALOG_MARGIN * 2 + DIALOG_BORDER) // SCALE - MENU_HEIGHT,
+                width=button_width,
+                **BUTTON_PROPS,
+            ))
+
+    # hide other UI elements
+    category_group.hidden = True
+    item_grid.hidden = True
+    arrow_group.hidden = True
+
+    # show dialog
+    dialog_group.hidden = False
+    dialog_buttons.hidden = False
+
+def hide_dialog() -> None:
+    # clear text
+    dialog_content.text = ""
+
+    # remove buttons
+    while len(dialog_buttons):
+        dialog_buttons.pop()
+
+    # hide dialog
+    dialog_group.hidden = True
+    dialog_buttons.hidden = True
+
+    # show other UI elements
+    category_group.hidden = False
+    item_grid.hidden = False
+    arrow_group.hidden = False
 
 # item navigation
 
@@ -584,6 +627,92 @@ select_category(categories[0])
 
 # application download
 
+def download_application(full_name: str = None) -> bool:
+    global selected_application
+    if full_name is None:
+        if selected_application is None:
+            return False
+        full_name = selected_application
+    repo_owner, repo_name = full_name.split("/")
+    path = "/sd/apps/{:s}".format(repo_name)
+    
+    if is_app_installed(repo_name):
+        return False
+
+    # get repository info
+    status_label.text = "Reading release data from {:s}".format(full_name)
+    try:
+        release = download_json(
+            url=RELEASE_URL.format(full_name),
+            name=full_name.replace("/", "_") + "_release",
+        )
+    except (OSError, ValueError, HttpError) as e:
+        status_label.text = "Unable to read release data from {:s}! {:s}".format(full_name, str(e))
+        return False
+    
+    # download project bundle
+    status_label.text = "Downloading release assets..."
+    asset = list(filter(lambda x: x["name"].endswith(".zip"), release["assets"]))[0]
+    try:
+        zip_path = download_zip(asset["browser_download_url"], repo_name)
+    except (OSError, ValueError, HttpError) as e:
+        status_label.text = "Failed to download release assets for {:s}! {:s}".format(full_name, str(e))
+        return False
+    
+    # read archived file
+    status_label.text = "Installing application..."
+    result = False
+    with open(zip_path, "rb") as f:
+        zf = ZipFile(f)
+        
+        # determine correct inner path based on CP version
+        major_version = int(os.uname().release.split(".")[0])
+        version_name = "CircuitPython {:d}.x".format(major_version)
+        for dirpath in (repo_name + "/" + version_name, version_name, repo_name, ""):
+            try:
+                zf[(dirpath + "/code.py").strip("/")]
+            except KeyError:
+                pass
+            else:
+                break
+        
+        # make sure we found code.py
+        try:
+            zf[(dirpath + "/code.py").strip("/")]
+        except KeyError:
+            status_label.text = "Could not locate application files within release!"
+        else:
+            # extract files
+            extractall(zf, path, dirpath)
+            status_label.text = "Successfully installed {:s}!".format(full_name)
+            result = True
+    
+    # remove zip file
+    os.remove(zip_path)
+    return result
+
+def remove_application(full_name: str = None) -> bool:
+    global selected_application
+    if full_name is None:
+        if selected_application is None:
+            return False
+        full_name = selected_application
+    repo_owner, repo_name = full_name.split("/")
+    path = "/sd/apps/{:s}".format(repo_name)
+    
+    if not is_app_installed(repo_name):
+        return False
+
+    status_label.text = "Deleting {:s}...".format(path)
+    try:
+        rmtree(path)
+    except OSError as e:
+        status_label.text = "Failed to delete {:s}: {:s}".format(path, str(e))
+        return False
+    else:
+        status_label.text = "Successfully deleted application!"
+        return True
+
 selected_application = None
 def select_application(index: int) -> None:
     global selected_category, current_page, selected_application
@@ -606,15 +735,27 @@ def select_application(index: int) -> None:
     item_icon, item_installed, item_title, item_author, item_description = item_group
 
     if item_installed.hidden:
-        dialog_content.text = "Would you like to download and install \"{:s}\" by {:s} to your SD card at /sd/apps/{:s}?".format(
-            item_title.text,
-            item_author.text,
-            repo_name
+        show_dialog(
+            content="Would you like to download and install \"{:s}\" by {:s} to your SD card at /sd/apps/{:s}?".format(
+                item_title.text,
+                item_author.text,
+                repo_name
+            ),
+            actions=[
+                ("Cancel", deselect_application),
+                ("Download", toggle_application),
+            ],
         )
     else:
-        dialog_content.text = "The application, \"{:s}\", is already installed. Would you like to remove it from your SD card at /sd/apps/{:s}? Any save data within /saves will be retained.".format(
-            item_title.text,
-            repo_name
+        show_dialog(
+            content="The application, \"{:s}\", is already installed. Would you like to remove it from your SD card at /sd/apps/{:s}? Any save data within /saves will be retained.".format(
+                item_title.text,
+                repo_name
+            ),
+            actions=[
+                ("Cancel", deselect_application),
+                ("Remove", toggle_application),
+            ],
         )
 
     dialog_group.hidden = False
@@ -626,96 +767,27 @@ def deselect_application() -> None:
     # invalidate selection
     selected_application = None
 
-    # hide dialog
-    dialog_group.hidden = True
-    dialog_buttons.hidden = True
-    dialog_yes.selected = False
+    # hide dialog and show other UI elements
+    hide_dialog()
 
-    # show other UI elements
-    category_group.hidden = False
-    item_grid.hidden = False
-    arrow_group.hidden = False
-
-def toggle_application() -> None:
+def toggle_application(full_name: str = None) -> bool:
     global selected_application, current_page
-    if selected_application is None:
-        return
+    if full_name is None:
+        if selected_application is None:
+            return False
+        full_name = selected_application
     repo_owner, repo_name = selected_application.split("/")
-    path = "/sd/apps/{:s}".format(repo_name)
-    
-    dialog_yes.selected = True
 
-    if is_app_installed(repo_name):
-        status_label.text = "Deleting {:s}...".format(path)
-        display.refresh()
-        try:
-            rmtree(path)
-        except OSError as e:
-            status_label.text = "Failed to delete {:s}: {:s}".format(path, str(e))
-            display.refresh()
-        else:
-            status_label.text = "Successfully deleted application!"
-            display.refresh()
+    if not is_app_installed(repo_name):
+        result = download_application(full_name)
     else:
-        status_label.text = "Reading release data from {:s}".format(selected_application)
-        display.refresh()
-
-        # get repository info
-        try:
-            release = download_json(
-                url=RELEASE_URL.format(selected_application),
-                name=selected_application.replace("/", "_") + "_release",
-            )
-        except (OSError, ValueError, HttpError) as e:
-            status_label.text = "Unable to read release data from {:s}! {:s}".format(selected_application, str(e))
-            display.refresh()
-        else:
-            # download project bundle
-            status_label.text = "Downloading release assets..."
-            asset = list(filter(lambda x: x["name"].endswith(".zip"), release["assets"]))[0]
-            try:
-                zip_path = download_zip(asset["browser_download_url"], repo_name)
-            except (OSError, ValueError, HttpError) as e:
-                status_label.text = "Failed to download release assets for {:s}! {:s}".format(selected_application, str(e))
-                display.refresh()
-            else:
-                status_label.text = "Installing application..."
-                display.refresh()
-
-                # read archived file
-                with open(zip_path, "rb") as f:
-                    zf = ZipFile(f)
-                    
-                    # determine correct inner path based on CP version
-                    major_version = int(os.uname().release.split(".")[0])
-                    version_name = "CircuitPython {:d}.x".format(major_version)
-                    for dirpath in (repo_name + "/" + version_name, version_name, repo_name, ""):
-                        try:
-                            zf[(dirpath + "/code.py").strip("/")]
-                        except KeyError:
-                            pass
-                        else:
-                            break
-                    
-                    # make sure we found code.py
-                    try:
-                        zf[(dirpath + "/code.py").strip("/")]
-                    except KeyError:
-                        status_label.text = "Could not locate application files within release!"
-                        display.refresh()
-                    else:
-                        # extract files
-                        extractall(zf, path, dirpath)
-
-                        status_label.text = "Successfully installed {:s}!".format(selected_application)
-                        display.refresh()
-                
-                # remove zip file
-                os.remove(zip_path)
+        result = remove_application(full_name)
 
     # hide dialog and update installed state
     deselect_application()
     refresh_page()
+
+    return result
 
 # mouse control
 mouse_group = displayio.Group(scale=SCALE)
@@ -747,10 +819,10 @@ async def mouse_task() -> None:
                                     if button.contains((mouse.x, mouse.y)):
                                         select_category(button.label)
                                         break
-                        elif dialog_yes.contains((mouse.x, mouse.y, 0)):
-                            toggle_application()
-                        elif dialog_no.contains((mouse.x, mouse.y, 0)):
-                            deselect_application()
+                        else:
+                            for button in dialog_buttons:
+                                if button.contains((mouse.x, mouse.y, 0)):
+                                    button.click()
                     previous_mouse_state = mouse_state
                 else:
                     timeouts += 1
