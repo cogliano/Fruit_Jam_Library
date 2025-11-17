@@ -5,13 +5,14 @@
 import argparse
 import json
 import os
+from pathlib import Path
 import re
 
 from github import Auth, Github
 from mdutils.mdutils import MdUtils
 
-if "ACCESS_TOKEN" in os.environ:
-    ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
+if "GITHUB_TOKEN" in os.environ:
+    ACCESS_TOKEN = os.environ["GITHUB_TOKEN"]
 else:
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, required=True)
@@ -22,14 +23,15 @@ DATABASE_FILE = "applications.json"
 MARKDOWN_FILE = "README.md"
 
 def main():
+    db_dir = Path(__file__).parent
 
     # delete readme
-    if os.path.isfile(MARKDOWN_FILE):
-        os.remove(MARKDOWN_FILE)
+    if os.path.isfile(db_dir / MARKDOWN_FILE):
+        os.remove(db_dir / MARKDOWN_FILE)
 
     # read applications database
     print("Reading database")
-    with open(DATABASE_FILE, "r") as f:
+    with open(db_dir / DATABASE_FILE, "r") as f:
         database = json.load(f)
 
     # connect with GitHub API
@@ -39,7 +41,7 @@ def main():
 
     # setup README
     print("Beginning markdown file generation")
-    md = MdUtils(file_name=MARKDOWN_FILE)
+    md = MdUtils(file_name=str(db_dir / MARKDOWN_FILE))
     md.new_header(
         level=1,
         title="Applications Database",
