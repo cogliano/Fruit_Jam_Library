@@ -273,7 +273,6 @@ def reset(timeout:int = 0) -> None:
 
 if not fj.sd_check():
     status_label.text = "SD card not mounted! SD card installation required for this application."
-    display.refresh()
     reset(3)
 
 # create necessary directories on sd card if they don't already exist
@@ -291,7 +290,6 @@ try:
         raise ValueError("{:d} response".format(applications))
 except (OSError, ValueError, AttributeError) as e:
     status_label.text = "Unable to fetch applications database! {:s}".format(str(e))
-    display.refresh()
     reset(3)
 
 categories = list(applications.keys())
@@ -571,7 +569,6 @@ def show_page(page: int = 0) -> None:
         except (OSError, ValueError, HttpError) as e:
             item_description.text = ""
             status_label.text = "Unable to read repository data from {:s}! {:s}".format(full_name, str(e))
-            display.refresh()
             time.sleep(1)
             continue
         else:
@@ -580,7 +577,6 @@ def show_page(page: int = 0) -> None:
 
         # read metadata from repository
         status_label.text = "Reading metadata from {:s}".format(full_name)
-        display.refresh()
         try:
             metadata = download_json(
                 url=METADATA_URL.format(full_name),
@@ -588,7 +584,6 @@ def show_page(page: int = 0) -> None:
             )
         except (OSError, ValueError, HttpError) as e:
             status_label.text = "Unable to read metadata from {:s}! {:s}".format(full_name, str(e))
-            display.refresh()
         else:
             item_title.text = metadata["title"]
 
@@ -597,7 +592,6 @@ def show_page(page: int = 0) -> None:
 
             if "icon" in metadata:
                 status_label.text = "Downloading icon from {:s}".format(full_name)
-                display.refresh()
                 try:
                     icon_path = download_image(
                         ICON_URL.format(full_name, repository["default_branch"], metadata["icon"]),
@@ -605,7 +599,6 @@ def show_page(page: int = 0) -> None:
                     )
                 except (OSError, ValueError, HttpError) as e:
                     status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
-                    display.refresh()
                 else:
                     icon_bmp, icon_palette = adafruit_imageload.load(icon_path)
                     item_icon.bitmap = icon_bmp
@@ -615,7 +608,6 @@ def show_page(page: int = 0) -> None:
         gc.collect()
 
     status_label.text = "Page loaded!"
-    display.refresh()
 
 def next_page() -> None:
     global current_page
