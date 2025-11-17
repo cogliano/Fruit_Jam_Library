@@ -419,6 +419,16 @@ def is_installed(name: str) -> bool:
     else:
         return True
 
+def rmtree(dirpath: str) -> None:
+    for name in os.listdir(dirpath):
+        filepath = dirpath + "/" + name
+        st_mode = os.stat(filepath)[0]
+        if st_mode & 0x8000:
+            os.remove(filepath)
+        elif st_mode & 0x4000:
+            rmtree(filepath)
+    os.rmdir(dirpath)
+
 # item navigation
 
 def select_category(name: str) -> None:
@@ -598,6 +608,7 @@ def deselect_application() -> None:
     # hide dialog
     dialog_group.hidden = True
     dialog_buttons.hidden = True
+    dialog_yes.selected = False
 
     # show other UI elements
     category_group.hidden = False
@@ -609,9 +620,21 @@ def toggle_application() -> None:
     if selected_application is None:
         return
     repo_owner, repo_name = selected_application.split("/")
+    path = "/sd/apps/{:s}".format(repo_name)
     
+    dialog_yes.selected = True
+
     if is_installed(repo_name):
-        print("Removing")
+        status_label.text = "Deleting {:s}...".format(path)
+        display.refresh()
+        try:
+            rmtree(path)
+        except OSError as e:
+            status_label.text = "Failed to delete {:s}: {:s}".format(path, str(e))
+            display.refresh()
+        else:
+            status_label.text = "Successfully deleted application!"
+            display.refresh()
     else:
         print("Downloading")
 
