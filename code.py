@@ -5,8 +5,8 @@
 # load included modules if we aren't installed on the root path
 if len(__file__.split("/")[:-1]) > 1:
     lib_path = "/".join(__file__.split("/")[:-1]) + "/lib"
-    import os
     try:
+        import os
         os.stat(lib_path)
     except:
         pass
