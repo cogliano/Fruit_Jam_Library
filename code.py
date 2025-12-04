@@ -222,6 +222,17 @@ BUTTON_PROPS = {
     "selected_outline": (config.palette_fg if config is not None else 0xffffff),
 }
 
+class ActionButton(Button):
+
+    def __init__(self, action: typing.Callable = None, **kwargs):
+        self._action = action
+        super().__init__(**kwargs)
+
+    def click(self) -> None:
+        if self._action is not None:
+            self.selected = True
+            self._action()
+
 # create groups
 root_group = displayio.Group()
 display.root_group = root_group
@@ -458,15 +469,6 @@ dialog_buttons = displayio.Group(scale=SCALE)
 dialog_buttons.hidden = True
 root_group.append(dialog_buttons)
 
-class DialogButton(Button):
-    def __init__(self, action: typing.Callable = None, **kwargs):
-        self._action = action
-        super().__init__(**kwargs)
-    def click(self) -> None:
-        if self._action is not None:
-            self.selected = True
-            self._action()
-
 def show_dialog(content: str, actions: list = None) -> None:
     # update content
     dialog_content.text = content
@@ -479,7 +481,7 @@ def show_dialog(content: str, actions: list = None) -> None:
         )
         buttons_width = (button_width + MENU_GAP) * len(actions) - MENU_GAP
         for index, (label, action) in enumerate(actions):
-            dialog_buttons.append(DialogButton(
+            dialog_buttons.append(ActionButton(
                 action=action,
                 label=label,
                 x=(DISPLAY_WIDTH - buttons_width) // 2 + (button_width + MENU_GAP) * index,
