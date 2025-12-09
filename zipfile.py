@@ -123,12 +123,14 @@ UnicodeDecodeError = UnicodeError
 OS_SEP = os.sep if hasattr(os, 'sep') else '/'
 OS_PATH_SEP = OS_SEP
 
+try:
+    import zlib
+except ImportError:
+    zlib = None
 
 try:
-    import zlib # We may need its compression method
     crc32 = zlib.crc32
-except (ImportError, AttributeError):
-    zlib = None
+except AttributeError:
     crc32 = binascii.crc32
 
 try:
@@ -787,7 +789,10 @@ def _get_decompressor(compress_type):
         if deflate:
             return DeflateDecompressor()
         else:
-            return zlib.decompressobj(-15)
+            try:
+                return zlib.decompressobj(-15)
+            except AttributeError:
+                return zlib.decompress
     elif compress_type == ZIP_BZIP2:
         return bz2.BZ2Decompressor()
     elif compress_type == ZIP_LZMA:
@@ -1081,7 +1086,7 @@ class ZipExtFile(BufferedIOBase):
             return b''
 
         # Read from file.
-        if self._compress_type == ZIP_DEFLATED:
+        if self._compress_type == ZIP_DEFLATED and type(self._decompressor).__name__ != "function":
             ## Handle unconsumed data.
             data = self._decompressor.unconsumed_tail
             if n > len(data):
@@ -1092,13 +1097,16 @@ class ZipExtFile(BufferedIOBase):
         if self._compress_type == ZIP_STORED:
             self._eof = self._compress_left <= 0
         elif self._compress_type == ZIP_DEFLATED and zlib:
-            n = max(n, self.MIN_READ_SIZE)
-            data = self._decompressor.decompress(data, n)
-            self._eof = (self._decompressor.eof or
-                         self._compress_left <= 0 and
-                         not self._decompressor.unconsumed_tail)
-            if self._eof:
-                data += self._decompressor.flush()
+            if type(self._decompressor).__name__ != "function":
+                n = max(n, self.MIN_READ_SIZE)
+                data = self._decompressor.decompress(data, n)
+                self._eof = (self._decompressor.eof or
+                            self._compress_left <= 0 and
+                            not self._decompressor.unconsumed_tail)
+                if self._eof:
+                    data += self._decompressor.flush()
+            else:
+                data = self._decompressor(data, -15)
         else:
             data = self._decompressor.decompress(data)
             self._eof = self._decompressor.eof or self._compress_left <= 0
