@@ -38,7 +38,7 @@ import adafruit_imageload
 from adafruit_portalbase.network import HttpError
 import adafruit_usb_host_mouse
 
-from zipfile import ZipFile
+from zipfile import ZipFile, BadZipFile
 
 try:
     import typing
@@ -729,31 +729,35 @@ def download_application(full_name: str = None) -> bool:
     # read archived file
     log("Installing application...")
     result = False
-    with open(zip_path, "rb") as f:
-        zf = ZipFile(f)
-        
-        # determine correct inner path based on CP version
-        major_version = int(os.uname().release.split(".")[0])
-        version_name = "CircuitPython {:d}.x".format(major_version)
-        for dirpath in (repo_name + "/" + version_name, version_name, repo_name, ""):
+    try:
+        with open(zip_path, "rb") as f:
+            zf = ZipFile(f)
+            
+            # determine correct inner path based on CP version
+            major_version = int(os.uname().release.split(".")[0])
+            version_name = "CircuitPython {:d}.x".format(major_version)
+            for dirpath in (repo_name + "/" + version_name, version_name, repo_name, ""):
+                try:
+                    zf[(dirpath + "/code.py").strip("/")]
+                except KeyError:
+                    pass
+                else:
+                    break
+            
+            # make sure we found code.py
             try:
                 zf[(dirpath + "/code.py").strip("/")]
             except KeyError:
-                pass
+                log("Could not locate application files within release!")
             else:
-                break
+                # extract files
+                extractall(zf, path, dirpath)
+                log("Successfully installed {:s}!".format(full_name))
+                result = True
+    except BadZipFile as e:
+        log("Unable to extract and install application! {:s}".format(str(e)))
+        return False
         
-        # make sure we found code.py
-        try:
-            zf[(dirpath + "/code.py").strip("/")]
-        except KeyError:
-            log("Could not locate application files within release!")
-        else:
-            # extract files
-            extractall(zf, path, dirpath)
-            log("Successfully installed {:s}!".format(full_name))
-            result = True
-    
     # remove zip file
     os.remove(zip_path)
     return result
