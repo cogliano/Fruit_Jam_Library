@@ -1023,8 +1023,9 @@ try:
                     else:
                         pass  # TODO
                 elif key in "1234567890":
-                    # TODO: categories
-                    pass
+                    key = (int(key) - 1) % 11  # map from 0 to 10 (inclusive)
+                    if key < len(categories):
+                        select_category(categories[key])
 
         # mouse input
         if mouse is not None and mouse.update() is not None:
