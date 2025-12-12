@@ -539,6 +539,7 @@ def show_dialog(content: str, actions: list = None) -> None:
                 width=button_width,
                 **BUTTON_PROPS,
             ))
+        dialog_buttons[0].selected = True  # initial selection
 
     # hide other UI elements
     category_group.hidden = True
@@ -926,45 +927,39 @@ def change_selected_item(dx: int, dy: int) -> bool:
     if (dx == 0 and dy == 0) or (dx != 0 and dy != 0) or abs(dx) > 1 or abs(dy) > 1:  # only change 1 axis by 1
         return
 
-    if dialog_buttons.hidden:
-        # TODO: up/down from arrows
+    # previous value
+    value = selected_item
+    if value is left_arrow:
+        value = (-1, 0)
+    elif value is right_arrow:
+        value = (PAGE_COLUMNS, 0)
+    elif value is None:
+        # initial value
+        value = (
+            ((PAGE_COLUMNS + 1) * (dx < 0) - 1) if dx != 0 else 0,
+            ((PAGE_ROWS + 1) * (dy < 0) - 1) if dy != 0 else 0
+        )
+    
+    while True:
+        # apply delta
+        value = (
+            ((value[0] + dx + 1) % (PAGE_COLUMNS + 2)) - 1, # allow -1 and PAGE_COLUMNS
+            (value[1] + dy) % PAGE_ROWS
+        )
 
-        # previous value
-        value = selected_item
-        if value is left_arrow:
-            value = (-1, 0)
-        elif value is right_arrow:
-            value = (PAGE_COLUMNS, 0)
-        elif value is None:
-            # initial value
-            value = (
-                ((PAGE_COLUMNS + 1) * (dx < 0) - 1) if dx != 0 else 0,
-                ((PAGE_ROWS + 1) * (dy < 0) - 1) if dy != 0 else 0
-            )
-        
-        while True:
-            # apply delta
-            value = (
-                ((value[0] + dx + 1) % (PAGE_COLUMNS + 2)) - 1, # allow -1 and PAGE_COLUMNS
-                (value[1] + dy) % PAGE_ROWS
-            )
-
-            # check visibility
-            if value[0] < 0:
-                if not left_arrow.hidden:
-                    value = left_arrow
-                    break
-            elif value[0] >= PAGE_COLUMNS:
-                if not right_arrow.hidden:
-                    value = right_arrow
-                    break
-            elif not item_grid.get_content(value).hidden:
+        # check visibility
+        if value[0] < 0:
+            if not left_arrow.hidden:
+                value = left_arrow
                 break
+        elif value[0] >= PAGE_COLUMNS:
+            if not right_arrow.hidden:
+                value = right_arrow
+                break
+        elif not item_grid.get_content(value).hidden:
+            break
 
-        select_item(value)
-
-    else:
-        pass  # TODO
+    select_item(value)
 
 select_item((0, 0))  # initial selection
 
@@ -1014,30 +1009,46 @@ try:
                 if key is None:
                     break
 
-                if key == "\x1b":  # escape
-                    reset()
-                elif key == "\x1b[A":  # up
-                    change_selected_item(0, -1)
-                elif key == "\x1b[B":  # down
-                    change_selected_item(0, 1)
-                elif key == "\x1b[C":  # right
-                    change_selected_item(1, 0)
-                elif key == "\x1b[D":  # left
-                    change_selected_item(-1, 0)
-                elif key == "\n":  # enter
-                    if dialog_buttons.hidden:
+                if dialog_buttons.hidden:
+                    if key == "\x1b":  # escape
+                        reset()
+                    elif key == "\x1b[A":  # up
+                        change_selected_item(0, -1)
+                    elif key == "\x1b[B":  # down
+                        change_selected_item(0, 1)
+                    elif key == "\x1b[C":  # right
+                        change_selected_item(1, 0)
+                    elif key == "\x1b[D":  # left
+                        change_selected_item(-1, 0)
+                    elif key == "\n":  # enter
                         if selected_item is right_arrow:
                             next_page()
                         elif selected_item is left_arrow:
                             previous_page()
                         elif isinstance(selected_item, tuple):
                             select_application(selected_item)
-                    else:
-                        pass  # TODO
-                elif key in "1234567890":
-                    key = (int(key) - 1) % 11  # map from 0 to 10 (inclusive)
-                    if key < len(categories):
-                        select_category(categories[key])
+                    elif key in "1234567890":
+                        key = (int(key) - 1) % 11  # map from 0 to 10 (inclusive)
+                        if key < len(categories):
+                            select_category(categories[key])
+                else:
+                    if key == "\x1b":  # escape
+                        deselect_application()
+                    elif key == "\x1b[C" or key == "\x1b[D":  # right or left
+                        dx = (ord("C") - ord(key[2])) * 2 + 1
+                        try:
+                            i = next((i for i, x in enumerate(dialog_buttons) if x.selected))
+                        except StopIteration:
+                            i = len(dialog_buttons) - 1 if dx > 0 else 0
+                        dialog_buttons[i].selected = False
+                        dialog_buttons[(i + dx) % len(dialog_buttons)].selected = True
+                    elif key == "\n":  # enter
+                        try:
+                            button = next((x for x in dialog_buttons if x.selected))
+                        except StopIteration:
+                            pass
+                        else:
+                            button.click()
 
         # mouse input
         if mouse is not None and mouse.update() is not None:
