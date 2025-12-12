@@ -812,8 +812,11 @@ def open_application(full_name: str = None) -> None:
         supervisor.reload()
 
 selected_application = None
-def select_application(index: int) -> None:
+def select_application(index: int|tuple) -> None:
     global selected_category, current_page, selected_application
+
+    if isinstance(index, tuple):
+        index = index[1] * PAGE_COLUMNS + index[0]
 
     index += current_page * PAGE_SIZE
     if index < 0 or index >= len(applications[selected_category]):
@@ -925,7 +928,7 @@ try:
             if mouse_state and not previous_mouse_state:
                 if dialog_buttons.hidden:
                     if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
-                        select_application(clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0])
+                        select_application(clicked_cell)
                     elif not right_arrow.hidden and right_arrow.contains((mouse.x, mouse.y, 0)):
                         next_page()
                     elif not left_arrow.hidden and left_arrow.contains((mouse.x, mouse.y, 0)):
