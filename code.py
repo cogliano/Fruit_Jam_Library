@@ -52,6 +52,7 @@ METADATA_URL = "https://raw.githubusercontent.com/{:s}/refs/heads/main/metadata.
 REPO_URL = "https://api.github.com/repos/{:s}"
 ICON_URL = "https://raw.githubusercontent.com/{:s}/{:s}/{:s}"
 RELEASE_URL = "https://api.github.com/repos/{:s}/releases/latest"
+BRANCH_DOWNLOAD_URL = "https://github.com/{:s}/archive/refs/heads/{:s}.zip"
 
 MAJOR_VERSION = int(os.uname().release.split(".")[0])
 VERSION_NAME = "CircuitPython {:d}.x".format(MAJOR_VERSION)
@@ -719,7 +720,7 @@ def download_application(full_name: str = None) -> bool:
     if is_app_installed(repo_name):
         return False
 
-    # get repository info
+    # get repository release info
     log("Reading release data from {:s}".format(full_name))
     try:
         release = download_json(
@@ -728,16 +729,31 @@ def download_application(full_name: str = None) -> bool:
         )
     except (OSError, ValueError, HttpError) as e:
         log("Unable to read release data from {:s}! {:s}".format(full_name, str(e)))
-        return False
-    
+
+        # get default branch
+        log("Attempting to locate default branch archive...")
+        try:
+            repository = download_json(
+                url=REPO_URL.format(full_name),
+                name=full_name.replace("/", "_"),
+            )
+        except (OSError, ValueError, HttpError) as e:
+            log("Unable to read repository data from {:s}! {:s}".format(full_name, str(e)))
+            return False
+        branch_name = repository["default_branch"]
+        download_url = BRANCH_DOWNLOAD_URL.format(full_name, branch_name)
+
+    else:
+        # locate release download
+        download_url = release["zipball_url"] if "zipball_url" in release else ""
+        if "assets" in release and len(assets := list(filter(lambda x: x["name"].endswith(".zip"), release["assets"]))):
+            download_url = assets[0]["browser_download_url"]
+        if not download_url:
+            log("Unable to locate release assets for {:s}!", full_name)
+            return False
+
     # download project bundle
     log("Downloading release assets...")
-    download_url = release["zipball_url"] if "zipball_url" in release else ""
-    if "assets" in release and len(assets := list(filter(lambda x: x["name"].endswith(".zip"), release["assets"]))):
-        download_url = assets[0]["browser_download_url"]
-    if not download_url:
-        log("Unable to locate release assets for {:s}!", full_name)
-        return False
     try:
         zip_path = download_zip(download_url, repo_name)
     except (OSError, ValueError, HttpError) as e:
