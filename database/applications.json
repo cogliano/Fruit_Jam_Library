@@ -14,13 +14,8 @@
         "relic-se/Fruit_Jam_ThumbyColor"
     ],
     "Screensavers": [
-<<<<<<< HEAD
         "relic-se/Fruit_Jam_Screensaver_Mystify",
 	"ZContent/Fruit_Jam_SS_Bundle"
-=======
-        "relic-se/Fruit_Jam_Screensaver_Mystify"
-        "ZContent/Fruit_Jam_SS_Bundle"
->>>>>>> bf590be502f13a5e3ad69c7f8d8d90f5b6fa65fe
     ],
     "Utilities": [
         "samblenny/fruit-jam-color-checker",
